@@ -1,6 +1,5 @@
 import numpy as np
 from numba import njit, int32
-import numba
 
 
 class GeneticAlgorithm:
@@ -45,6 +44,26 @@ def evaluate_solution(solution, dist_mat):
     for i in range(population_size):
         evaluation[i] = route_length(dist_mat, solution[i])
     return evaluation
+
+
+@njit()
+def rank_selection(evaluation, best_prob, worst_prob):
+    population_size = evaluation.shape[0]
+    probability = np.zeros(evaluation.shape)
+    rank = np.argsort(-evaluation)
+    for i in range(population_size):
+        probability[rank[i]] = worst_prob + (best_prob - worst_prob) * i / (population_size - 1)
+    return probability
+
+
+@njit()
+def roulette_selection():
+    pass
+
+
+@njit()
+def tournament_selection():
+    pass
 
 
 @njit()
