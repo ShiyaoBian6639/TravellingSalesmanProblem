@@ -1,3 +1,3 @@
 # TravellingSalesmanProblem
 
-/int_i^j
+%20/int_i^j
