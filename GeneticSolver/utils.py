@@ -72,5 +72,45 @@ def check_individual_feasibility(individual):
 
 
 @njit()
+def crossover(father, mother, begin, end):
+    num_city = father.shape[0]
+    temp = np.ones(num_city, dtype=int32)
+    child = np.zeros(num_city, dtype=int32)
+
+    for i in range(begin):
+        city = father[i]
+        child[i] = city
+        temp[city] = 0
+
+    pos = begin
+    for i in range(begin, end):
+        city = mother[i]
+        if temp[city]:
+            child[pos] = city
+            temp[city] = 0
+            pos += 1
+
+    for i in range(begin, num_city):
+        city = father[i]
+        if temp[city]:
+            child[pos] = city
+            temp[city] = 0
+            pos += 1
+
+    return child
+
+
+@njit()
+def mutate(child, mutation_rate):
+    if np.random.rand() < mutation_rate:
+        num_city = child.shape[0]
+        pos1 = np.random.randint(num_city)
+        pos2 = np.random.randint(num_city)
+        temp = child[pos2]
+        child[pos2] = child[pos1]
+        child[pos1] = temp
+
+
+@njit()
 def check_population_feasibility():
     pass
