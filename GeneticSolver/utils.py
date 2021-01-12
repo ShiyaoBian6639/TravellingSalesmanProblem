@@ -1,5 +1,5 @@
 import numpy as np
-from numba import njit, int32
+from numba import njit, int32, prange
 
 
 class GeneticAlgorithm:
@@ -39,21 +39,25 @@ def generate_initial_solution(n, population_size):
 
 @njit()
 def evaluate_solution(solution, dist_mat):
-    population_size = solution.shape[0]
+    population_size, num_city = solution.shape
     evaluation = np.zeros(population_size)
-    for i in range(population_size):
-        evaluation[i] = route_length(dist_mat, solution[i])
+    for i in prange(population_size):
+        total = 0
+        for j in range(num_city - 1):
+            total += dist_mat[solution[i, j], solution[i, j + 1]]
+        total += dist_mat[solution[i, -1], solution[i, 0]]
+        evaluation[i] = total
     return evaluation
 
 
 @njit()
 def rank_selection(evaluation, best_prob, worst_prob):
     population_size = evaluation.shape[0]
-    probability = np.zeros(evaluation.shape)
+    score = np.zeros(evaluation.shape)
     rank = np.argsort(-evaluation)
     for i in range(population_size):
-        probability[rank[i]] = worst_prob + (best_prob - worst_prob) * i / (population_size - 1)
-    return probability
+        score[rank[i]] = worst_prob + (best_prob - worst_prob) * i / (population_size - 1)
+    return score, rank
 
 
 @njit()
@@ -101,16 +105,40 @@ def crossover(father, mother, begin, end):
 
 
 @njit()
+def generate_crossover_position(num_city):
+    pos = np.random.randint(0, num_city, 2)
+    if pos[0] > pos[1]:
+        swap(pos, 0, 1)
+
+
+@njit()
+def swap(arr, pos1, pos2):
+    temp = arr[pos2]
+    arr[pos2] = arr[pos1]
+    arr[pos1] = temp
+
+
+@njit()
 def mutate(child, mutation_rate):
     if np.random.rand() < mutation_rate:
         num_city = child.shape[0]
         pos1 = np.random.randint(num_city)
         pos2 = np.random.randint(num_city)
-        temp = child[pos2]
-        child[pos2] = child[pos1]
-        child[pos1] = temp
+        swap(child, pos1, pos2)
 
 
 @njit()
-def check_population_feasibility():
-    pass
+def parent_selection(score):
+    probability = score / score.sum()  # get probability distribution
+    cdf = np.cumsum(probability)  # get cumulative distribution function
+    return np.searchsorted(cdf, np.random.rand()), np.searchsorted(cdf, np.random.rand())
+
+
+@njit()
+def ga_solve(num_city, dist_mat, population_size, generation_size):
+    initial_solution = generate_initial_solution(num_city, population_size)  # generate initial solution
+    evaluation = evaluate_solution(initial_solution, dist_mat)  # evaluate initial solution
+    score, rank = rank_selection(evaluation, 0.9, 0.1)  # rank based selection
+    father, mother = parent_selection(score)  # get parents
+    crossover_pos = generate_crossover_position(num_city)  # get crossover position
+    child = crossover(father, mother, crossover_pos[0], crossover_pos[1])  # reproduce
