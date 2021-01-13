@@ -4,7 +4,7 @@ from GeneticSolver.utils import ga_solve
 from matplotlib import pyplot as plt
 
 num_city, instance_name = 30, 1
-population_size = 10000
+population_size = 3000
 generation_size = 1000
 mutation_rate = 0.01
 low_prob, high_prob = 0.1, 0.9

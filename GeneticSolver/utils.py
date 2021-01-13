@@ -2,17 +2,6 @@ import numpy as np
 from numba import njit, int32, prange
 
 
-class GeneticAlgorithm:
-    def __init__(self, dist_mat, population_size):
-        self.dist_mat = dist_mat
-        self.num_city = dist_mat.shape[0]
-        self.population_size = population_size
-        self.initial_solution = self.generate_initial_solution()
-
-    def generate_initial_solution(self):
-        return generate_initial_solution(self.num_city, self.population_size)
-
-
 @njit()
 def route_length(dist_mat, route):
     total = 0
