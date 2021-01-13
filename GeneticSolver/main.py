@@ -5,10 +5,12 @@ from matplotlib import pyplot as plt
 
 num_city, instance_name = 30, 1
 population_size = 10000
-generation_size = 10000
+generation_size = 1000
+mutation_rate = 0.01
+low_prob, high_prob = 0.1, 0.9
 coordinates, dist_mat = data_reader(num_city, instance_name)
 
-sol = ga_solve(num_city, dist_mat, population_size, generation_size)
+score, route, best_sol,  best_score = ga_solve(num_city, dist_mat, population_size, generation_size, mutation_rate, low_prob, high_prob)
 
-plt.plot(sol)
+plt.plot(score)
 plt.show()

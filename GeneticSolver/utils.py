@@ -170,6 +170,10 @@ def mutate(child, mutation_rate):
 
 @njit()
 def mating(probability):
+    """
+    :param probability: the probability of each individual to be chosen as parents
+    :return: father_list, mother_list
+    """
     qualified = probability > np.random.random(probability.shape)
     num_parents = int(qualified.sum() / 2)
     father_list = np.zeros(num_parents, dtype=int32)
@@ -192,20 +196,36 @@ def mating(probability):
 
 
 @njit()
-def reproduce(father_list, mother_list, population):
+def reproduce(father_list, mother_list, population, mutation_rate):
+    """
+    generating children inheriting parents gene
+    :param father_list: index of father
+    :param mother_list: index of mother
+    :param population: current population
+    :param mutation_rate: mutation rate
+    :return: all children
+    """
     population_size, num_city = population.shape
     num_child = len(father_list)
     pos = generate_crossover_position(num_city, num_child)
     next_generation = np.zeros((num_child, num_city), dtype=int32)
     for i in range(num_child):
         child = crossover(population[father_list[i]], population[mother_list[i]], pos[i, 0], pos[i, 1])
-        mutate(child, 0.01)
+        mutate(child, mutation_rate)
         next_generation[i] = child
     return next_generation
 
 
 @njit()
 def natural_selection(population, next_generation, evaluation, next_generation_eval):
+    """
+    determines who can survive
+    :param population: current population
+    :param next_generation: new born children
+    :param evaluation: route length of each individual in the population
+    :param next_generation_eval: route length of each individual of children
+    :return: new population and their route length after natural selection
+    """
     population_size, num_city = population.shape
     total_evaluation = np.hstack((evaluation, next_generation_eval))
     total_rank = np.argsort(-total_evaluation)
@@ -218,15 +238,36 @@ def natural_selection(population, next_generation, evaluation, next_generation_e
 
 # merge a sorted list and another unsorted list
 @njit()
-def ga_solve(num_city, dist_mat, population_size, generation_size):
+def ga_solve(num_city, dist_mat, population_size, generation_size, mutation_rate, low_prob, high_prob):
+    """
+    main function
+    :param num_city:
+    :param dist_mat:
+    :param population_size:
+    :param generation_size:
+    :param mutation_rate:
+    :param low_prob:
+    :param high_prob:
+    :return: best route_length in each generation, best individual in each generation, final solution score, final route
+    """
     population = generate_initial_solution(num_city, population_size)  # generate initial solution
     evaluation = evaluate_solution(population, dist_mat)  # evaluate initial solution
-    best_individual = np.zeros(generation_size)
+    best_individual = np.zeros(generation_size)  # best individual score in each generation
+    best_solution_pool = np.zeros((generation_size, num_city), dtype=int32)  # best solution in each generation
+    global_best_score = np.inf  # the global best score
+    global_best_route = np.zeros(num_city, dtype=int32)  # the global best route
     for i in range(generation_size):
-        probability, rank = rank_selection(evaluation, 0.1, 0.9)  # rank based selection
+        probability, rank = rank_selection(evaluation, low_prob, high_prob)  # rank based selection
         father_list, mother_list = mating(probability)
-        next_generation = reproduce(father_list, mother_list, population)
+        next_generation = reproduce(father_list, mother_list, population, mutation_rate)
         next_generation_eval = evaluate_solution(next_generation, dist_mat)
         population, evaluation = natural_selection(population, next_generation, evaluation, next_generation_eval)
-        best_individual[i] = min(evaluation)
-    return best_individual
+        best_index = np.argmin(evaluation)
+        current_best_score = evaluation[best_index]
+        current_best_route = population[best_index]
+        best_individual[i] = current_best_score
+        best_solution_pool[i] = current_best_route
+        if current_best_score < global_best_score:
+            global_best_score = current_best_score
+            global_best_route = current_best_route
+    return best_individual, best_solution_pool, global_best_score, global_best_route
