@@ -39,6 +39,11 @@ def generate_initial_solution(n, population_size):
 
 @njit()
 def evaluate_solution(solution, dist_mat):
+    """
+    :param solution: row population size, col num_city
+    :param dist_mat:
+    :return: route length of each row
+    """
     population_size, num_city = solution.shape
     evaluation = np.zeros(population_size)
     for i in prange(population_size):
@@ -51,13 +56,20 @@ def evaluate_solution(solution, dist_mat):
 
 
 @njit()
-def rank_selection(evaluation, best_prob, worst_prob):
+def rank_selection(evaluation, worst_prob, best_prob):
+    """
+    perform rank based selection
+    :param evaluation: individual score represented as route length
+    :param best_prob: highest probability of being selected as parents
+    :param worst_prob: lowest probability of being selected as parents
+    :return: probability of each individual being selected as parents, rank of each individual
+    """
     population_size = evaluation.shape[0]
-    score = np.zeros(evaluation.shape)
+    probability = np.zeros(evaluation.shape)
     rank = np.argsort(-evaluation)
     for i in range(population_size):
-        score[rank[i]] = worst_prob + (best_prob - worst_prob) * i / (population_size - 1)
-    return score, rank
+        probability[rank[i]] = worst_prob + (best_prob - worst_prob) * i / (population_size - 1)
+    return probability, rank
 
 
 @njit()
@@ -72,11 +84,24 @@ def tournament_selection():
 
 @njit()
 def check_individual_feasibility(individual):
+    """
+    validates the crossover and mutation procedure
+    :param individual: a permutation of num_city
+    :return: if the individual is feasible
+    """
     return len(np.unique(individual)) == len(individual)
 
 
 @njit()
 def crossover(father, mother, begin, end):
+    """
+    perform crossover operation
+    :param father: feasible individual
+    :param mother: feasible individual
+    :param begin: beginning position of gene sequence
+    :param end: ending position of gene sequence
+    :return: feasible individual (child)
+    """
     num_city = father.shape[0]
     temp = np.ones(num_city, dtype=int32)
     child = np.zeros(num_city, dtype=int32)
@@ -105,10 +130,20 @@ def crossover(father, mother, begin, end):
 
 
 @njit()
-def generate_crossover_position(num_city):
-    pos = np.random.randint(0, num_city, 2)
-    if pos[0] > pos[1]:
-        swap(pos, 0, 1)
+def generate_crossover_position(num_city, num_child):
+    """
+    randomly select crossover position
+    :param num_city:
+    :param num_child:
+    :return: sorted crossover position
+    """
+    pos = np.random.randint(0, num_city, (num_child, 2))
+    for i in range(num_child):
+        if pos[i, 0] > pos[i, 1]:
+            temp = pos[i, 1]
+            pos[i, 1] = pos[i, 0]
+            pos[i, 0] = temp
+    return pos
 
 
 @njit()
@@ -120,6 +155,12 @@ def swap(arr, pos1, pos2):
 
 @njit()
 def mutate(child, mutation_rate):
+    """
+    mutation operation is performed by swapping two random positions in chromosome
+    :param child: feasible individual inheriting parents gene
+    :param mutation_rate: probability of mutation
+    :return: mutated child (mutation may not happen)
+    """
     if np.random.rand() < mutation_rate:
         num_city = child.shape[0]
         pos1 = np.random.randint(num_city)
@@ -128,17 +169,64 @@ def mutate(child, mutation_rate):
 
 
 @njit()
-def parent_selection(score):
-    probability = score / score.sum()  # get probability distribution
-    cdf = np.cumsum(probability)  # get cumulative distribution function
-    return np.searchsorted(cdf, np.random.rand()), np.searchsorted(cdf, np.random.rand())
+def mating(probability):
+    qualified = probability > np.random.random(probability.shape)
+    num_parents = int(qualified.sum() / 2)
+    father_list = np.zeros(num_parents, dtype=int32)
+    mother_list = np.zeros(num_parents, dtype=int32)
+    count = 0
+    count_father = 0
+    count_mother = 0
+    for index, boolean in enumerate(qualified):
+        if boolean:
+            if count % 2:
+                father_list[count_father] = index
+                count_father += 1
+            else:
+                mother_list[count_mother] = index
+                count_mother += 1
+            count += 1
+            if count == num_parents * 2:
+                break
+    return father_list, mother_list
 
 
 @njit()
+def reproduce(father_list, mother_list, population):
+    population_size, num_city = population.shape
+    num_child = len(father_list)
+    pos = generate_crossover_position(num_city, num_child)
+    next_generation = np.zeros((num_child, num_city), dtype=int32)
+    for i in range(num_child):
+        child = crossover(population[father_list[i]], population[mother_list[i]], pos[i, 0], pos[i, 1])
+        mutate(child, 0.01)
+        next_generation[i] = child
+    return next_generation
+
+
+@njit()
+def natural_selection(population, next_generation, evaluation, next_generation_eval):
+    population_size, num_city = population.shape
+    total_evaluation = np.hstack((evaluation, next_generation_eval))
+    total_rank = np.argsort(-total_evaluation)
+    survive = total_rank < population_size
+    total_population = np.vstack((population, next_generation))
+    new_population = total_population[survive, :]
+    new_evaluation = total_evaluation[survive]
+    return new_population, new_evaluation
+
+
+# merge a sorted list and another unsorted list
+@njit()
 def ga_solve(num_city, dist_mat, population_size, generation_size):
-    initial_solution = generate_initial_solution(num_city, population_size)  # generate initial solution
-    evaluation = evaluate_solution(initial_solution, dist_mat)  # evaluate initial solution
-    score, rank = rank_selection(evaluation, 0.9, 0.1)  # rank based selection
-    father, mother = parent_selection(score)  # get parents
-    crossover_pos = generate_crossover_position(num_city)  # get crossover position
-    child = crossover(father, mother, crossover_pos[0], crossover_pos[1])  # reproduce
+    population = generate_initial_solution(num_city, population_size)  # generate initial solution
+    evaluation = evaluate_solution(population, dist_mat)  # evaluate initial solution
+    best_individual = np.zeros(generation_size)
+    for i in range(generation_size):
+        probability, rank = rank_selection(evaluation, 0.1, 0.9)  # rank based selection
+        father_list, mother_list = mating(probability)
+        next_generation = reproduce(father_list, mother_list, population)
+        next_generation_eval = evaluate_solution(next_generation, dist_mat)
+        population, evaluation = natural_selection(population, next_generation, evaluation, next_generation_eval)
+        best_individual[i] = min(evaluation)
+    return best_individual
