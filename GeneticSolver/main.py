@@ -9,7 +9,7 @@ population_size = 2000
 generation_size = 2000
 mutation_rate = 0.01
 low_prob, high_prob = 0.1, 0.9
-num_threads = 4
+num_threads = 6
 coordinates, dist_mat = data_reader(num_city, instance_name)
 
 score, route, best_sol, best_score = ga_solve(num_city, dist_mat, population_size, generation_size, mutation_rate,

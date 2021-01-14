@@ -210,12 +210,12 @@ def reproduce(father_list, mother_list, population, evaluation, dist_mat, mutati
     return population, evaluation
 
 
-@njit(parallel=True)
+@njit()
 def mutation(population, evaluation, dist_mat, mutation_rate):
     population_size, num_city = population.shape
     pos = generate_crossover_position(num_city, population_size)
     mutation_prob = np.random.random(population_size)
-    for i in prange(population_size):
+    for i in range(population_size):
         if mutation_prob[i] < mutation_rate:
             if pos[i, 1] - pos[i, 0] == 1:
                 pos1 = population[i, pos[i, 0] - 1]
