@@ -185,14 +185,16 @@ def mating(probability):
 
 
 @njit()
-def reproduce(father_list, mother_list, population, mutation_rate):
+def reproduce(father_list, mother_list, population, evaluation, dist_mat, mutation_rate):
     """
     generating children inheriting parents gene
     :param father_list: index of father
     :param mother_list: index of mother
     :param population: current population
+    :param evaluation: fitness of population
+    :param dist_mat: distance matrix
     :param mutation_rate: mutation rate
-    :return: all children
+    :return: population + new born children
     """
     population_size, num_city = population.shape
     num_child = len(father_list)
@@ -202,7 +204,10 @@ def reproduce(father_list, mother_list, population, mutation_rate):
         child = crossover(population[father_list[i]], population[mother_list[i]], pos[i, 0], pos[i, 1])
         mutate(child, mutation_rate)
         next_generation[i] = child
-    return next_generation
+    next_generation_eval = evaluate_solution(next_generation, dist_mat)
+    population = np.vstack((population, next_generation))
+    evaluation = np.hstack((evaluation, next_generation_eval))
+    return population, evaluation
 
 
 @njit(parallel=True)
@@ -210,7 +215,7 @@ def mutation(population, evaluation, dist_mat, mutation_rate):
     population_size, num_city = population.shape
     pos = generate_crossover_position(num_city, population_size)
     mutation_prob = np.random.random(population_size)
-    for i in range(population_size):
+    for i in prange(population_size):
         if mutation_prob[i] < mutation_rate:
             if pos[i, 1] - pos[i, 0] == 1:
                 pos1 = population[i, pos[i, 0] - 1]
@@ -226,7 +231,6 @@ def mutation(population, evaluation, dist_mat, mutation_rate):
                 pos4 = population[i, (pos[i, 0] + 1) % num_city]
                 destroy = dist_mat[pos1, pos2] + dist_mat[pos3, pos4]
                 repair = dist_mat[pos1, pos3] + dist_mat[pos2, pos4]
-
             else:
                 pos1 = population[i, pos[i, 0] - 1]
                 pos2 = population[i, pos[i, 0]]
@@ -240,26 +244,22 @@ def mutation(population, evaluation, dist_mat, mutation_rate):
             temp = population[i, pos[i, 1]]
             population[i, pos[i, 1]] = population[i, pos[i, 0]]
             population[i, pos[i, 0]] = temp
-    return population, evaluation, pos
+    return population, evaluation
 
 
 @njit()
-def natural_selection(population, next_generation, evaluation, next_generation_eval):
+def natural_selection(population, evaluation, population_size):
     """
     determines who can survive
     :param population: current population
-    :param next_generation: new born children
     :param evaluation: route length of each individual in the population
-    :param next_generation_eval: route length of each individual of children
+    :param population_size: number of individuals allowed in the environment
     :return: new population and their route length after natural selection
     """
-    population_size, num_city = population.shape
-    total_evaluation = np.hstack((evaluation, next_generation_eval))
-    total_rank = np.argsort(-total_evaluation)
-    survive = total_rank < population_size
-    total_population = np.vstack((population, next_generation))
-    new_population = total_population[survive, :]
-    new_evaluation = total_evaluation[survive]
+    rank = np.argsort(-evaluation)
+    survive = rank < population_size
+    new_population = population[survive, :]
+    new_evaluation = evaluation[survive]
     return new_population, new_evaluation
 
 
@@ -284,12 +284,16 @@ def ga_solve(num_city, dist_mat, population_size, generation_size, mutation_rate
     global_best_score = np.inf  # the global best score
     global_best_route = np.zeros(num_city, dtype=int32)  # the global best route
     for i in range(generation_size):
+        # fitness = 1 / evaluation
+        # probability = roulette_selection(fitness)
         probability = rank_selection(evaluation, low_prob, high_prob)  # rank based selection
         father_list, mother_list = mating(probability)
-        next_generation = reproduce(father_list, mother_list, population, mutation_rate)
-        next_generation_eval = evaluate_solution(next_generation, dist_mat)
+        population, evaluation = reproduce(father_list, mother_list, population, evaluation, dist_mat, mutation_rate)
+        population, evaluation = mutation(population, evaluation, dist_mat, mutation_rate)
+        # next_generation = reproduce(father_list, mother_list, population, mutation_rate)
+        # next_generation_eval = evaluate_solution(next_generation, dist_mat)
         # mutate parents
-        population, evaluation = natural_selection(population, next_generation, evaluation, next_generation_eval)
+        population, evaluation = natural_selection(population, evaluation, population_size)
         best_index = np.argmin(evaluation)
         current_best_score = evaluation[best_index]
         current_best_route = population[best_index]

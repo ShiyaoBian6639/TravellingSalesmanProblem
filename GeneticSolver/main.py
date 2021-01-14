@@ -5,14 +5,13 @@ from matplotlib import pyplot as plt
 from collections import Counter
 
 num_city, instance_name = 30, 1
-population_size = 200
-generation_size = 50000
-mutation_rate = 1
+population_size = 2000
+generation_size = 2000
+mutation_rate = 0.01
 low_prob, high_prob = 0.1, 0.9
-num_threads = 2
+num_threads = 4
 coordinates, dist_mat = data_reader(num_city, instance_name)
-aug_dist_mat = dist_mat.copy()
-np.fill_diagonal(aug_dist_mat, 0)
+
 score, route, best_sol, best_score = ga_solve(num_city, dist_mat, population_size, generation_size, mutation_rate,
                                               low_prob, high_prob)
 
