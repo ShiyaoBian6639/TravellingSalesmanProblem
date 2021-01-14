@@ -58,12 +58,12 @@ def rank_selection(evaluation, worst_prob, best_prob):
     rank = np.argsort(-evaluation)
     for i in range(population_size):
         probability[rank[i]] = worst_prob + (best_prob - worst_prob) * i / (population_size - 1)
-    return probability, rank
+    return probability
 
 
 @njit()
-def roulette_selection():
-    pass
+def roulette_selection(fitness):
+    return fitness / fitness.sum()
 
 
 @njit()
@@ -205,6 +205,44 @@ def reproduce(father_list, mother_list, population, mutation_rate):
     return next_generation
 
 
+@njit(parallel=True)
+def mutation(population, evaluation, dist_mat, mutation_rate):
+    population_size, num_city = population.shape
+    pos = generate_crossover_position(num_city, population_size)
+    mutation_prob = np.random.random(population_size)
+    for i in range(population_size):
+        if mutation_prob[i] < mutation_rate:
+            if pos[i, 1] - pos[i, 0] == 1:
+                pos1 = population[i, pos[i, 0] - 1]
+                pos2 = population[i, pos[i, 0]]
+                pos3 = population[i, pos[i, 1]]
+                pos4 = population[i, (pos[i, 1] + 1) % num_city]
+                destroy = dist_mat[pos1, pos2] + dist_mat[pos3, pos4]
+                repair = dist_mat[pos1, pos3] + dist_mat[pos2, pos4]
+            elif pos[i, 1] - pos[i, 0] == num_city - 1:
+                pos1 = population[i, pos[i, 1] - 1]
+                pos2 = population[i, pos[i, 1]]
+                pos3 = population[i, pos[i, 0]]
+                pos4 = population[i, (pos[i, 0] + 1) % num_city]
+                destroy = dist_mat[pos1, pos2] + dist_mat[pos3, pos4]
+                repair = dist_mat[pos1, pos3] + dist_mat[pos2, pos4]
+
+            else:
+                pos1 = population[i, pos[i, 0] - 1]
+                pos2 = population[i, pos[i, 0]]
+                pos3 = population[i, (pos[i, 0] + 1) % num_city]
+                pos4 = population[i, pos[i, 1] - 1]
+                pos5 = population[i, pos[i, 1]]
+                pos6 = population[i, (pos[i, 1] + 1) % num_city]
+                destroy = dist_mat[pos1, pos2] + dist_mat[pos2, pos3] + dist_mat[pos4, pos5] + dist_mat[pos5, pos6]
+                repair = dist_mat[pos1, pos5] + dist_mat[pos5, pos3] + dist_mat[pos4, pos2] + dist_mat[pos2, pos6]
+            evaluation[i] += repair - destroy
+            temp = population[i, pos[i, 1]]
+            population[i, pos[i, 1]] = population[i, pos[i, 0]]
+            population[i, pos[i, 0]] = temp
+    return population, evaluation, pos
+
+
 @njit()
 def natural_selection(population, next_generation, evaluation, next_generation_eval):
     """
@@ -246,10 +284,11 @@ def ga_solve(num_city, dist_mat, population_size, generation_size, mutation_rate
     global_best_score = np.inf  # the global best score
     global_best_route = np.zeros(num_city, dtype=int32)  # the global best route
     for i in range(generation_size):
-        probability, rank = rank_selection(evaluation, low_prob, high_prob)  # rank based selection
+        probability = rank_selection(evaluation, low_prob, high_prob)  # rank based selection
         father_list, mother_list = mating(probability)
         next_generation = reproduce(father_list, mother_list, population, mutation_rate)
         next_generation_eval = evaluate_solution(next_generation, dist_mat)
+        # mutate parents
         population, evaluation = natural_selection(population, next_generation, evaluation, next_generation_eval)
         best_index = np.argmin(evaluation)
         current_best_score = evaluation[best_index]
@@ -260,3 +299,17 @@ def ga_solve(num_city, dist_mat, population_size, generation_size, mutation_rate
             global_best_score = current_best_score
             global_best_route = current_best_route
     return best_individual, best_solution_pool, global_best_score, global_best_route
+
+
+@njit(parallel=True)
+def multi_start_ga(num_city, dist_mat, population_size, generation_size, mutation_rate, low_prob, high_prob,
+                   num_threads):
+    global_score = np.zeros(num_threads)
+    global_route = np.zeros((num_threads, num_city), dtype=int32)
+    for i in prange(num_threads):
+        _, _, score, route = ga_solve(num_city, dist_mat, population_size, generation_size, mutation_rate, low_prob,
+                                      high_prob)
+        global_score[i] = score
+        global_route[i] = route
+    index = np.argmin(global_score)
+    return global_score[index], global_route[index]
