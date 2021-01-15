@@ -4,6 +4,8 @@ from GeneticSolver.utils import *
 from matplotlib import pyplot as plt
 from collections import Counter
 
+import os
+
 num_city, instance_name = 30, 1
 population_size = 2000
 generation_size = 2000

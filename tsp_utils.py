@@ -8,7 +8,7 @@ from mip import Model, xsum, CBC, GRB, BINARY, INTEGER, minimize
 
 # helper functions
 def dir_manipulation(data_type, n_city, n_instance):
-    data_dir = "./data"
+    data_dir = "../data"
     file_name = f"{n_city}cities_instance{n_instance}.csv"
     return os.path.join(data_dir, data_type, file_name)
 

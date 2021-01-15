@@ -185,7 +185,7 @@ def mating(probability):
 
 
 @njit()
-def reproduce(father_list, mother_list, population, evaluation, dist_mat, mutation_rate):
+def reproduce(father_list, mother_list, population, evaluation, dist_mat):
     """
     generating children inheriting parents gene
     :param father_list: index of father
@@ -193,7 +193,6 @@ def reproduce(father_list, mother_list, population, evaluation, dist_mat, mutati
     :param population: current population
     :param evaluation: fitness of population
     :param dist_mat: distance matrix
-    :param mutation_rate: mutation rate
     :return: population + new born children
     """
     population_size, num_city = population.shape
@@ -202,7 +201,6 @@ def reproduce(father_list, mother_list, population, evaluation, dist_mat, mutati
     next_generation = np.zeros((num_child, num_city), dtype=int32)
     for i in range(num_child):
         child = crossover(population[father_list[i]], population[mother_list[i]], pos[i, 0], pos[i, 1])
-        mutate(child, mutation_rate)
         next_generation[i] = child
     next_generation_eval = evaluate_solution(next_generation, dist_mat)
     population = np.vstack((population, next_generation))
@@ -288,7 +286,7 @@ def ga_solve(num_city, dist_mat, population_size, generation_size, mutation_rate
         # probability = roulette_selection(fitness)
         probability = rank_selection(evaluation, low_prob, high_prob)  # rank based selection
         father_list, mother_list = mating(probability)
-        population, evaluation = reproduce(father_list, mother_list, population, evaluation, dist_mat, mutation_rate)
+        population, evaluation = reproduce(father_list, mother_list, population, evaluation, dist_mat)
         population, evaluation = mutation(population, evaluation, dist_mat, mutation_rate)
         # next_generation = reproduce(father_list, mother_list, population, mutation_rate)
         # next_generation_eval = evaluate_solution(next_generation, dist_mat)
